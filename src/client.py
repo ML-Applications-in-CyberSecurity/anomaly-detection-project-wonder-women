@@ -6,6 +6,13 @@ import joblib
 import os
 from together import Together
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.decomposition import PCA
+import warnings
+warnings.filterwarnings("ignore", message="Field \"model_id\" has conflict with protected namespace")
+
+
 
 HOST = 'localhost'
 PORT = 9999
@@ -29,6 +36,10 @@ if not os.path.exists(csv_file):
         writer = csv.writer(file)
         writer.writerow(['src_port', 'dst_port', 'packet_size', 'duration_ms', 'protocol', 'description'])
 
+normal_samples = []
+anomaly_samples = []
+
+
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
     buffer = ""
@@ -49,6 +60,12 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 processed_data = pre_process_data(data)
 
                 prediction = model.predict(processed_data)
+
+                if prediction[0] == -1:
+                    anomaly_samples.append(processed_data[0])  # add as 1D array
+                else:
+                    normal_samples.append(processed_data[0])  # add as 1D array
+
 
                 if prediction[0] == -1:
                     print(f"Anomaly detected in data: {data}")
@@ -87,3 +104,39 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
             except json.JSONDecodeError:
                 print("Error decoding JSON.")
+
+    import pandas as pd
+
+    # Combine samples
+    X = normal_samples + anomaly_samples
+    y = [0] * len(normal_samples) + [1] * len(anomaly_samples)  # 0=normal, 1=anomaly
+
+    if len(X) > 0:  # avoid errors if no data was collected
+        # Reduce to 2D with PCA
+        pca = PCA(n_components=2)
+        X_reduced = pca.fit_transform(X)
+
+        # Create DataFrame for seaborn
+        df_vis = pd.DataFrame({
+            'PC1': X_reduced[:, 0],
+            'PC2': X_reduced[:, 1],
+            'Label': ['Normal' if label == 0 else 'Anomaly' for label in y]
+        })
+
+        # Plot
+        plt.figure(figsize=(10, 7))
+        sns.scatterplot(
+            data=df_vis,
+            x='PC1', y='PC2',
+            hue='Label',
+            palette={'Normal': 'blue', 'Anomaly': 'red'},
+            alpha=0.7
+        )
+        plt.title('PCA Visualization of Normal vs. Anomalous Data')
+        plt.xlabel('Principal Component 1')
+        plt.ylabel('Principal Component 2')
+        plt.legend()
+        plt.show()
+    else:
+        print("No data collected for visualization.")
+
