@@ -4,25 +4,26 @@ import pandas as pd
 import joblib
 import os
 from together import Together
+import numpy as np
 
 HOST = 'localhost'
 PORT = 9999
 
-model = joblib.load("anomaly_model.joblib")
+model = joblib.load("../anomaly_model.joblib")
 
 def pre_process_data(data):
-    # تبدیل داده به DataFrame
+    #DataFrame
     df = pd.DataFrame([data])
-    # اعمال One-Hot Encoding به ستون protocol
+    #  One-Hot Encoding 
     df_processed = pd.get_dummies(df, columns=['protocol'], drop_first=True)
-    # اطمینان از وجود همه ستون‌های مورد نیاز
+   
     expected_columns = ['src_port', 'dst_port', 'packet_size', 'duration_ms', 'protocol_UDP']
     for col in expected_columns:
         if col not in df_processed.columns:
-            df_processed[col] = 0  # پر کردن ستون‌های غایب با 0
-    # مرتب‌سازی ستون‌ها به ترتیب ثابت
+            df_processed[col] = 0 #empty colums = 0
+    # sort
     df_processed = df_processed[expected_columns]
-    # تبدیل به آرایه NumPy
+    # NumPy
     return np.array(df_processed)
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -42,16 +43,14 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 data = json.loads(line)
                 print(f'Data Received:\n{data}\n')
 
-                # پیش‌ پردازش داده دریافتی
                 processed_data = pre_process_data(data)
 
-                # پیش‌بینی با مدل
                 prediction = model.predict(processed_data)
 
-                # بررسی نتیجه پیش‌بینی
+                # analysis
                 if prediction[0] == -1:
                     print(f"Anomaly detected in data: {data}")
-                    # اتصال به API Together AI
+                    #API Together AI
                     api_key = os.getenv('TOGETHER_API_KEY')#متغیر محلی
                     client = Together(api_key=api_key)
                     messages = [
